@@ -1,5 +1,6 @@
 from transmission_rpc import Client
-from secrets import TRANSMISSION_USERNAME, TRANSMISSION_PASSWORD
+from secrets import (TRANSMISSION_ADDRESS, TRANSMISSION_PORT,
+                     TRANSMISSION_USERNAME, TRANSMISSION_PASSWORD)
 
 
 FIELDS = ["id", "name", "addedDate", "status",
@@ -8,7 +9,7 @@ FIELDS = ["id", "name", "addedDate", "status",
 
 
 def _get_client():
-    c = Client(host='localhost', port=9091,
+    c = Client(host=TRANSMISSION_ADDRESS, port=TRANSMISSION_PORT,
                username=TRANSMISSION_USERNAME, password=TRANSMISSION_PASSWORD)
     return c
 
