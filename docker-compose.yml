@@ -1,0 +1,13 @@
+version: "3.3"
+
+services:
+  telegram-torrent-bot:
+    build:
+      context: .
+    restart: unless-stopped
+    networks:
+      - letsencrypt-reverse-proxy_raspberry
+
+networks:
+  letsencrypt-reverse-proxy_raspberry:
+    external: true
