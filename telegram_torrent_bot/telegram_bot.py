@@ -4,6 +4,7 @@
 
 import logging
 import re
+import requests
 from requests.models import PreparedRequest
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
@@ -15,7 +16,8 @@ from secrets import TELEGRAM_WEBHOOK_ENDPOINT, TELEGRAM_USERID_LIST, TORRENTBOT_
 
 TORRENT_URL_REGEX = r"http[s]?://.+\.torrent"
 TORRENTDAY_URL_REGEX = r"http[s]?://(?:www.)torrentday\.com/.+\.torrent"  # (?:[?].+=.+)?
-MAGNET_URI_REGEX = r"magnet:\?\S+"
+MAGNET_URI_REGEX = r"(magnet:\?[^\"\s]+)"
+URL_REGEX = r"http[s]?://[^\"\s]+"
 
 TORRENT_ID_REGEX = r"(\d+)\..*"
 
@@ -34,7 +36,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 
-MAIN, DOWNLOAD, TORRENT, CONFIRM_REMOVAL = range(4)
+MAIN, PICK_TORRENT, DOWNLOAD, TORRENT_STATUS, CONFIRM_REMOVAL = range(5)
 
 status_keyboard = [["Downloading", "Seeding", "Paused"]]
 status_markup = ReplyKeyboardMarkup(status_keyboard)
@@ -50,6 +52,9 @@ torrent_markup = ReplyKeyboardMarkup(torrent_keyboard)
 confirm_keyboard = [["Keep data", "Delete data"],
                     ["Cancel"]]
 confirm_markup = ReplyKeyboardMarkup(confirm_keyboard)
+
+cancel_keyboard = [["Cancel"]]
+cancel_markup = ReplyKeyboardMarkup(cancel_keyboard)
 
 
 def prepare_url(url):
@@ -83,6 +88,42 @@ def start(update, context):
 
 def download_torrent(update, context):
     url = prepare_url(context.matches[0].group(0))
+    context.user_data["torrent_url"] = url
+    update.message.reply_text("Got a torrrent link! What's the nature of its contents?",
+                              reply_markup=download_markup)
+
+    return DOWNLOAD
+
+
+def extract_torrent(update, context):
+    url = context.matches[0].group(0)
+    r = requests.get(url)
+    context.user_data["torrent_urls"] = []
+    if 200 <= r.status_code < 300:
+        torrent_urls = set([t for t in re.finditer(TORRENT_URL_REGEX, r.text, re.MULTILINE)])
+        if torrent_urls:
+            update.message.reply_text("Found these torrent files:")
+            for index, url in enumerate(torrent_urls, start=1):
+                context.user_data["torrent_urls"].append(url)
+                update.message.reply_text(f"{index}. {url}")
+
+        magnet_urls = set([t for t in re.finditer(MAGNET_URI_REGEX, r.text, re.MULTILINE)])
+        if magnet_urls:
+            update.message.reply_text("Found these magnet URLs:")
+            for index, url in enumerate(magnet_urls, start=len(torrent_urls) + 1):
+                context.user_data["torrent_urls"].append(url)
+                update.message.reply_text(f"{index}. {url}")
+
+        update.message.reply_text("Which one would you like to download?",
+                                  reply_markup=cancel_markup)
+
+        return PICK_TORRENT
+    return MAIN
+
+
+def select_torrent(update, context):
+    url_id = int(context.matches[0].group(1))
+    url = context.user_data["torrent_urls"][url_id - 1]
     context.user_data["torrent_url"] = url
     update.message.reply_text("Got a torrrent link! What's the nature of its contents?",
                               reply_markup=download_markup)
@@ -137,7 +178,7 @@ def check_torrent(update, context):
     update.message.reply_text(f"Selected {t.name}\nWhat would you like to do?",
                               reply_markup=torrent_markup)
 
-    return TORRENT
+    return TORRENT_STATUS
 
 
 def handle_download(update, context):
@@ -183,28 +224,32 @@ def main():
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
-    # Add conversation handler with the states MAIN, DOWNLOAD, and TORRENT
+    # Add conversation handler with the states MAIN, DOWNLOAD, and TORRENT_STATUS
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start, Filters.user(user_id=TELEGRAM_USERID_LIST))],
 
         states={
             MAIN: [MessageHandler(Filters.regex(TORRENT_URL_REGEX) | Filters.regex(MAGNET_URI_REGEX),
                                   download_torrent),
+                   MessageHandler(Filters.regex(URL_REGEX),
+                                  extract_torrent),
                    MessageHandler(Filters.regex("^(Downloading|Seeding|Paused)$"),
                                   check_torrents),
                    MessageHandler(Filters.regex(TORRENT_ID_REGEX),
                                   check_torrent),
                    ],
+            PICK_TORRENT: [MessageHandler(Filters.regex(TORRENT_ID_REGEX),
+                                          select_torrent),
+                           ],
             DOWNLOAD: [MessageHandler(Filters.regex("^(Movie|TV Show|Other)$"),
                                       start_download),
                        ],
-            TORRENT: [MessageHandler(Filters.regex("^(Start|Pause|Delete)$"),
+            TORRENT_STATUS: [MessageHandler(Filters.regex("^(Start|Pause|Delete)$"),
                                      handle_download),
-                      ],
-            CONFIRM_REMOVAL: [
-                      MessageHandler(Filters.regex("^(Keep data|Delete data)$"),
-                                     perform_operation),
-                      ],
+                             ],
+            CONFIRM_REMOVAL: [MessageHandler(Filters.regex("^(Keep data|Delete data)$"),
+                                             perform_operation),
+                              ],
         },
 
         fallbacks=[MessageHandler(Filters.regex("^Cancel$"), cancel)]
