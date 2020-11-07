@@ -100,14 +100,14 @@ def extract_torrent(update, context):
     r = requests.get(url)
     context.user_data["torrent_urls"] = []
     if 200 <= r.status_code < 300:
-        torrent_urls = set([t for t in re.finditer(TORRENT_URL_REGEX, r.text, re.MULTILINE)])
+        torrent_urls = set([m.group() for m in re.finditer(TORRENT_URL_REGEX, r.text, re.MULTILINE)])
         if torrent_urls:
             update.message.reply_text("Found these torrent files:")
             for index, url in enumerate(torrent_urls, start=1):
                 context.user_data["torrent_urls"].append(url)
                 update.message.reply_text(f"{index}. {url}")
 
-        magnet_urls = set([t for t in re.finditer(MAGNET_URI_REGEX, r.text, re.MULTILINE)])
+        magnet_urls = set([m.group() for m in re.finditer(MAGNET_URI_REGEX, r.text, re.MULTILINE)])
         if magnet_urls:
             update.message.reply_text("Found these magnet URLs:")
             for index, url in enumerate(magnet_urls, start=len(torrent_urls) + 1):
