@@ -5,6 +5,7 @@
 import logging
 import re
 import json
+import html
 from selenium.webdriver import Chrome
 from selenium.webdriver import ChromeOptions as Options
 from requests.models import PreparedRequest
@@ -250,7 +251,7 @@ def handle_callback(update, context):
         update.callback_query.message.edit_reply_markup(reply_markup=SELECT_TORRENT_TYPE_INLINE_KEYBOARD)
 
     elif data["a"] == ADD_NEW_TORRENT:
-        torrent_url = update["callback_query"]["message"]["text"].split(". ")[1]
+        torrent_url = html.unescape(update["callback_query"]["message"]["text"].split(". ")[1])
         torrent_type = data["t_type"]
         logger.info(f"torrent_url: {torrent_url}\ntorrent_type: {torrent_type}")
 
@@ -315,13 +316,13 @@ def handle_callback(update, context):
         elif data["o"] == "delete_data":
             manage_torrent(data["t_id"], "delete", True)
             update.callback_query.answer("Download and data deleted!")
-            message = torrent_url = update["callback_query"]["message"]["text"].split(". ")[1]
+            message = update["callback_query"]["message"]["text"].split(". ")[1]
             update.callback_query.message.edit_reply_markup(reply_markup=None)
             update.callback_query.message.edit_text(f"X - {message}")
         elif data["o"] == "delete_no_data":
             manage_torrent(data["t_id"], "delete", False)
             update.callback_query.answer("Download deleted, data kept!")
-            message = torrent_url = update["callback_query"]["message"]["text"].split(". ")[1]
+            message = update["callback_query"]["message"]["text"].split(". ")[1]
             update.callback_query.message.edit_reply_markup(reply_markup=None)
             update.callback_query.message.edit_text(f"X - {message}")
 
