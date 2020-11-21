@@ -4,6 +4,8 @@ services:
   telegram-torrent-bot:
     build:
       context: .
+    volumes:
+      - .:/usr/src/app
     restart: unless-stopped
     networks:
       - letsencrypt-reverse-proxy_raspberry
