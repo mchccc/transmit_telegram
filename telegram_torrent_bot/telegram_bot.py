@@ -122,8 +122,7 @@ def start(update, context):
 def handle_torrent_magnet_link(update, context):
     message = update.message.reply_text(f"Looking for valid links")
 
-    url = prepare_url(context.matches[0].group(0))
-    context.user_data["torrent_url"] = url
+    url = context.matches[0].group(0)
 
     return pick_new_download(message, url)
 
@@ -251,7 +250,7 @@ def handle_callback(update, context):
         update.callback_query.message.edit_reply_markup(reply_markup=SELECT_TORRENT_TYPE_INLINE_KEYBOARD)
 
     elif data["a"] == ADD_NEW_TORRENT:
-        torrent_url = html.unescape(update["callback_query"]["message"]["text"].split(". ")[1])
+        torrent_url = prepare_url(html.unescape(update["callback_query"]["message"]["text"].split(". ")[1]))
         torrent_type = data["t_type"]
         logger.info(f"torrent_url: {torrent_url}\ntorrent_type: {torrent_type}")
 
