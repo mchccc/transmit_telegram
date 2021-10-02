@@ -1,15 +1,19 @@
-version: "3.3"
+version: "3.4"
 
 services:
-  telegram-torrent-bot:
-    build:
-      context: .
-    volumes:
-      - .:/usr/src/app
-    restart: unless-stopped
-    networks:
-      - letsencrypt-reverse-proxy_raspberry
+    telegram:
+        container_name: telegram
+        build:
+            context: .
+        volumes:
+            - .:/usr/src/app
+        ports:
+            - 3520:3520
+        restart: unless-stopped
+        networks:
+            - raspberry-swag
 
 networks:
-  letsencrypt-reverse-proxy_raspberry:
-    external: true
+    raspberry-swag:
+        name: swag-reverseproxy_raspberry-swag
+        external: true

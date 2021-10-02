@@ -184,6 +184,8 @@ def check_torrents(update, context):
                                                                 "t_id": t.id}))]
                 ])
             )
+        else:
+            update.message.reply_text("No downloading torrents")
 
     elif state == "Seeding":
         torrents = get_seeding_torrents()
@@ -202,6 +204,8 @@ def check_torrents(update, context):
                                                                 "t_id": t.id}))]
                 ])
             )
+        else:
+            update.message.reply_text("No seeding torrents")
 
     else:
         torrents = get_paused_torrents()
@@ -219,6 +223,8 @@ def check_torrents(update, context):
                                                                 "t_id": t.id}))]
                 ])
             )
+        else:
+            update.message.reply_text("No paused torrents")
 
     return MAIN
 
