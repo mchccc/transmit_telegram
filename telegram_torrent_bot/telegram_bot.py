@@ -13,7 +13,7 @@ from telegram import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardBu
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackQueryHandler
 from transmission_interface import (add_torrent, get_downloading_torrents,
                                     get_seeding_torrents, get_paused_torrents,
-                                    get_torrent, manage_torrent)
+                                    get_torrent, manage_torrent as transmission_manage_torrent)
 from secrets import TELEGRAM_WEBHOOK_ENDPOINT, TELEGRAM_USERID_LIST, TORRENTBOT_TOKEN, TORRENTDAY_KEY
 
 
@@ -164,65 +164,68 @@ def check_torrents(update, context):
     state = context.matches[0].group(0)
     if state == "Downloading":
         torrents = get_downloading_torrents()
-        for t in torrents:
-            try:
-                eta = t.eta
-            except ValueError:
-                eta = "N/A"
-            dr = (t.rateDownload / (1024 * 1024))
-            ur = (t.rateUpload / (1024 * 1024))
-            update.message.reply_text(
-                DOWNLOADING_FORMATTER.format(t, dr, ur, eta),
-                reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(text="pause download",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "pause",
-                                                                "t_id": t.id})),
-                         InlineKeyboardButton(text="remove",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete",
-                                                                "t_id": t.id}))]
-                ])
-            )
+        if torrents:
+            for t in torrents:
+                try:
+                    eta = t.eta
+                except ValueError:
+                    eta = "N/A"
+                dr = (t.rateDownload / (1024 * 1024))
+                ur = (t.rateUpload / (1024 * 1024))
+                update.message.reply_text(
+                    DOWNLOADING_FORMATTER.format(t, dr, ur, eta),
+                    reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(text="pause download",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "pause",
+                                                                            "t_id": t.id})),
+                             InlineKeyboardButton(text="remove",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "delete",
+                                                                            "t_id": t.id}))]
+                    ])
+                )
         else:
             update.message.reply_text("No downloading torrents")
 
     elif state == "Seeding":
         torrents = get_seeding_torrents()
-        for t in torrents:
-            ur = (t.rateUpload / (1024 * 1024))
-            update.message.reply_text(
-                SEEDING_FORMATTER.format(t, ur),
-                reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(text="pause torrent",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "pause",
-                                                                "t_id": t.id})),
-                         InlineKeyboardButton(text="remove",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete",
-                                                                "t_id": t.id}))]
-                ])
-            )
+        if torrents:
+            for t in torrents:
+                ur = (t.rateUpload / (1024 * 1024))
+                update.message.reply_text(
+                    SEEDING_FORMATTER.format(t, ur),
+                    reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(text="pause torrent",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "pause",
+                                                                            "t_id": t.id})),
+                             InlineKeyboardButton(text="remove",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "delete",
+                                                                            "t_id": t.id}))]
+                    ])
+                )
         else:
             update.message.reply_text("No seeding torrents")
 
     else:
         torrents = get_paused_torrents()
-        for t in torrents:
-            update.message.reply_text(
-                PAUSED_FORMATTER.format(t),
-                reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(text="start download",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "start",
-                                                                "t_id": t.id})),
-                         InlineKeyboardButton(text="remove",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete",
-                                                                "t_id": t.id}))]
-                ])
-            )
+        if torrents:
+            for t in torrents:
+                update.message.reply_text(
+                    PAUSED_FORMATTER.format(t),
+                    reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton(text="start download",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "start",
+                                                                            "t_id": t.id})),
+                             InlineKeyboardButton(text="remove",
+                                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                                            "o": "delete",
+                                                                            "t_id": t.id}))]
+                    ])
+                )
         else:
             update.message.reply_text("No paused torrents")
 
@@ -238,6 +241,83 @@ def cancel(update, context):
 
     user_data.clear()
     return MAIN
+
+
+def add_new_torrent(update, torrent_type):
+    torrent_url = prepare_url(html.unescape(update["callback_query"]["message"]["text"].split(". ")[1]))
+    logger.info(f"torrent_url: {torrent_url}\ntorrent_type: {torrent_type}")
+
+    t = add_torrent(torrent_url, torrent_type)
+
+    update.callback_query.answer()
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton(text="start download",
+                              callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                        "o": "start",
+                                                        "t_id": t.id})),
+         InlineKeyboardButton(text="remove",
+                              callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                        "o": "delete",
+                                                        "t_id": t.id}))]
+    ])
+    update.callback_query.message.edit_text(f"✓ - {torrent_type}. {torrent_url}")
+    update.callback_query.message.edit_reply_markup(reply_markup=reply_markup)
+    update.callback_query.message.reply_text(f"Added {t.name}!", reply_markup=reply_markup)
+
+    return MAIN
+
+
+def manage_torrent(update, torrent_id, operation):
+    if operation == "start":
+        transmission_manage_torrent(torrent_id, "start")
+        update.callback_query.answer("Download started!")
+        update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(text="pause download",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "pause",
+                                                            "t_id": torrent_id})),
+             InlineKeyboardButton(text="remove",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "delete",
+                                                            "t_id": torrent_id}))]
+        ]))
+    elif operation == "pause":
+        transmission_manage_torrent(torrent_id, "pause")
+        update.callback_query.answer("Download paused!")
+        update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(text="start download",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "start",
+                                                            "t_id": torrent_id})),
+             InlineKeyboardButton(text="remove",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "delete",
+                                                            "t_id": torrent_id}))]
+        ]))
+    elif operation == "delete":
+        update.callback_query.answer()
+        update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(text="remove data too",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "delete_data",
+                                                            "t_id": torrent_id})),
+             InlineKeyboardButton(text="keep data",
+                                  callback_data=json.dumps({"a": MANAGE_TORRENT,
+                                                            "o": "delete_no_data",
+                                                            "t_id": torrent_id}))]
+        ]))
+    elif operation == "delete_data":
+        transmission_manage_torrent(torrent_id, "delete", True)
+        update.callback_query.answer("Download and data deleted!")
+        message = update["callback_query"]["message"]["text"].split(". ")[1]
+        update.callback_query.message.edit_reply_markup(reply_markup=None)
+        update.callback_query.message.edit_text(f"X - {message}")
+    elif operation == "delete_no_data":
+        transmission_manage_torrent(torrent_id, "delete", False)
+        update.callback_query.answer("Download deleted, data kept!")
+        message = update["callback_query"]["message"]["text"].split(". ")[1]
+        update.callback_query.message.edit_reply_markup(reply_markup=None)
+        update.callback_query.message.edit_text(f"X - {message}")
 
 
 def handle_callback(update, context):
@@ -256,80 +336,13 @@ def handle_callback(update, context):
         update.callback_query.message.edit_reply_markup(reply_markup=SELECT_TORRENT_TYPE_INLINE_KEYBOARD)
 
     elif data["a"] == ADD_NEW_TORRENT:
-        torrent_url = prepare_url(html.unescape(update["callback_query"]["message"]["text"].split(". ")[1]))
         torrent_type = data["t_type"]
-        logger.info(f"torrent_url: {torrent_url}\ntorrent_type: {torrent_type}")
-
-        t = add_torrent(torrent_url, torrent_type)
-
-        update.callback_query.answer()
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton(text="start download",
-                                    callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                            "o": "start",
-                                                            "t_id": t.id})),
-                InlineKeyboardButton(text="remove",
-                                    callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                            "o": "delete",
-                                                            "t_id": t.id}))]
-        ])
-        update.callback_query.message.edit_text(f"✓ - {torrent_type}. {torrent_url}")
-        update.callback_query.message.edit_reply_markup(reply_markup=reply_markup)
-        update.callback_query.message.reply_text(f"Added {t.name}!", reply_markup=reply_markup)
-
-        return MAIN
+        return add_new_torrent(update, torrent_type)
 
     elif data["a"] == MANAGE_TORRENT:
-        if data["o"] == "start":
-            manage_torrent(data["t_id"], "start")
-            update.callback_query.answer("Download started!")
-            update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(text="pause download",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "pause",
-                                                                "t_id": data["t_id"]})),
-                 InlineKeyboardButton(text="remove",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete",
-                                                                "t_id": data["t_id"]}))]
-            ]))
-        elif data["o"] == "pause":
-            manage_torrent(data["t_id"], "pause")
-            update.callback_query.answer("Download paused!")
-            update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(text="start download",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "start",
-                                                                "t_id": data["t_id"]})),
-                 InlineKeyboardButton(text="remove",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete",
-                                                                "t_id": data["t_id"]}))]
-            ]))
-        elif data["o"] == "delete":
-            update.callback_query.answer()
-            update.callback_query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(text="remove data too",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete_data",
-                                                                "t_id": data["t_id"]})),
-                 InlineKeyboardButton(text="keep data",
-                                      callback_data=json.dumps({"a": MANAGE_TORRENT,
-                                                                "o": "delete_no_data",
-                                                                "t_id": data["t_id"]}))]
-            ]))
-        elif data["o"] == "delete_data":
-            manage_torrent(data["t_id"], "delete", True)
-            update.callback_query.answer("Download and data deleted!")
-            message = update["callback_query"]["message"]["text"].split(". ")[1]
-            update.callback_query.message.edit_reply_markup(reply_markup=None)
-            update.callback_query.message.edit_text(f"X - {message}")
-        elif data["o"] == "delete_no_data":
-            manage_torrent(data["t_id"], "delete", False)
-            update.callback_query.answer("Download deleted, data kept!")
-            message = update["callback_query"]["message"]["text"].split(". ")[1]
-            update.callback_query.message.edit_reply_markup(reply_markup=None)
-            update.callback_query.message.edit_text(f"X - {message}")
+        operation = data["o"]
+        torrent_id = data["t_id"]
+        manage_torrent(update, torrent_id, operation)
 
 
 def main():
